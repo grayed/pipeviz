@@ -286,7 +286,6 @@ GraphManager::GetInfo ()
   iter = gst_bin_iterate_elements (GST_BIN (m_pGraph));
   GstElement* element = NULL;
   bool done = false;
-  size_t id = 0;
   while (!done) {
 #if GST_VERSION_MAJOR >= 1
     GValue value = G_VALUE_INIT;
@@ -300,9 +299,6 @@ GraphManager::GetInfo ()
       case GST_ITERATOR_OK: {
 #endif
         ElementInfo elementInfo;
-        elementInfo.m_id = id;
-        id++;
-
         gchar *name = gst_element_get_name (element);
         elementInfo.m_name = name;
         g_free (name);
@@ -314,7 +310,6 @@ GraphManager::GetInfo ()
 
         GstIterator *padItr = gst_element_iterate_pads (element);
         bool padDone = FALSE;
-        std::size_t padId = 0;
         GstPad *pad;
         while (!padDone) {
 #if GST_VERSION_MAJOR >= 1
@@ -329,8 +324,6 @@ GraphManager::GetInfo ()
             case GST_ITERATOR_OK: {
 #endif
               PadInfo padInfo;
-              padInfo.m_id = padId;
-
               gchar *pad_name = gst_pad_get_name (pad);
               padInfo.m_name = pad_name;
               g_free (pad_name);
@@ -355,7 +348,6 @@ GraphManager::GetInfo ()
               padDone = TRUE;
               break;
           };
-          padId++;
         }
 #if GST_VERSION_MAJOR >= 1
         g_value_reset (&value);
@@ -381,8 +373,8 @@ GraphManager::GetInfo ()
                                                res[i].m_name.c_str ());
 
     for (std::size_t j = 0; j < res[i].m_pads.size (); j++) {
-      res[i].m_connections[j].m_elementId = -1;
-      res[i].m_connections[j].m_padId = -1;
+      res[i].m_connections[j].m_elementName = -1;
+      res[i].m_connections[j].m_padName = -1;
 
       GstPad *pad = gst_element_get_static_pad (
       element, res[i].m_pads[j].m_name.c_str ());
@@ -398,8 +390,8 @@ GraphManager::GetInfo ()
           if (res[k].m_name == peerName) {
             for (std::size_t l = 0; l < res[k].m_pads.size (); l++) {
               if (res[k].m_pads[l].m_name == peerPadName) {
-                res[i].m_connections[j].m_elementId = res[k].m_id;
-                res[i].m_connections[j].m_padId = res[k].m_pads[l].m_id;
+                res[i].m_connections[j].m_elementName = res[k].m_name;
+                res[i].m_connections[j].m_padName = res[k].m_pads[l].m_name;
                 break;
               }
             }

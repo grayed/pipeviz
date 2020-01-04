@@ -331,14 +331,14 @@ PipelineIE::Export (QSharedPointer<GraphManager> pgraph,
       }
       gst_object_unref (pad);
 
-      if (info[i].m_connections[j].m_elementId != (size_t) -1
-      && info[i].m_connections[j].m_padId != (size_t) -1) {
+      if (!info[i].m_connections[j].m_elementName.empty()
+          && !info[i].m_connections[j].m_padName.empty()) {
         std::size_t elementPos, padPos;
         for (elementPos = 0; elementPos < info.size (); elementPos++) {
-          if (info[elementPos].m_id == info[i].m_connections[j].m_elementId) {
+          if (info[elementPos].m_name == info[i].m_connections[j].m_elementName) {
             for (padPos = 0; padPos < info[elementPos].m_pads.size (); padPos++)
-              if (info[elementPos].m_pads[padPos].m_id
-              == info[i].m_connections[j].m_padId)
+              if (info[elementPos].m_pads[padPos].m_name
+              == info[i].m_connections[j].m_padName)
                 break;
 
             if (padPos < info[elementPos].m_pads.size ())

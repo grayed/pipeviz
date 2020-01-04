@@ -27,12 +27,12 @@ GraphDisplay::GraphDisplay (QWidget *parent, Qt::WindowFlags f)
 }
 
 ElementInfo*
-GraphDisplay::getElement (std::size_t elementId)
+GraphDisplay::getElement (std::string elementName)
 {
   ElementInfo* element = NULL;
   std::size_t i = 0;
   for (; i < m_info.size (); i++) {
-    if (m_info[i].m_id == elementId) {
+    if (m_info[i].m_name == elementName) {
       element = &m_info[i];
       break;
     }
@@ -41,35 +41,19 @@ GraphDisplay::getElement (std::size_t elementId)
 }
 
 PadInfo*
-GraphDisplay::getPad (std::size_t elementId, std::size_t padId)
+GraphDisplay::getPad (std::string elementName, std::string padName)
 {
   PadInfo* pad = NULL;
-  ElementInfo* element = getElement (elementId);
+  ElementInfo* element = getElement (elementName);
   if (!element)
     return NULL;
   std::size_t j = 0;
   for (; j < element->m_pads.size (); j++)
-    if (element->m_pads[j].m_id == padId) {
+    if (element->m_pads[j].m_name == padName) {
       pad = &element->m_pads[j];
       break;
     }
   return pad;
-}
-
-void
-GraphDisplay::updateDisplayInfoIds ()
-{
-  for (std::size_t i = 0; i < m_info.size (); i++) {
-    for (std::size_t j = 0; j < m_displayInfo.size (); j++) {
-      if (m_info[i].m_name == m_displayInfo[j].m_name) {
-        m_displayInfo[j].m_id = m_info[i].m_id;
-        for (std::size_t k = 0; k < m_displayInfo.size (); k++) {
-          if (k != j && m_displayInfo[j].m_id == m_displayInfo[k].m_id)
-            m_displayInfo[k].m_id = (size_t) -1;
-        }
-      }
-    }
-  }
 }
 
 void
@@ -108,7 +92,6 @@ GraphDisplay::update (const std::vector<ElementInfo> &info)
 
   if (needUpdate) {
     m_info = info;
-    updateDisplayInfoIds ();
     calculatePositions ();
     repaint ();
   }
@@ -130,7 +113,7 @@ GraphDisplay::paintEvent (QPaintEvent *event)
 
     for (std::size_t j = 0; j < m_info[i].m_pads.size (); j++) {
 
-      QPoint point = getPadPosition (m_info[i].m_id, m_info[i].m_pads[j].m_id);
+      QPoint point = getPadPosition (m_info[i].m_name, m_info[i].m_pads[j].m_name);
 
       int xPos, yPos;
       xPos = point.x ();
@@ -153,13 +136,13 @@ GraphDisplay::paintEvent (QPaintEvent *event)
         textPos = QPoint (point.x () + PAD_SIZE, point.y () + PAD_SIZE / 2);
       painter.drawText (textPos, QString (m_info[i].m_pads[j].m_name.c_str ()));
 
-      if (m_info[i].m_connections[j].m_elementId != ((size_t) -1)
-      && m_info[i].m_connections[j].m_padId != ((size_t) -1)) {
+      if (!m_info[i].m_connections[j].m_elementName.empty()
+          && !m_info[i].m_connections[j].m_padName.empty()) {
         xPos = point.x ();
         yPos = point.y ();
 
-        point = getPadPosition (m_info[i].m_connections[j].m_elementId,
-                                m_info[i].m_connections[j].m_padId);
+        point = getPadPosition (m_info[i].m_connections[j].m_elementName,
+                                m_info[i].m_connections[j].m_padName);
         int xPosPeer, yPosPeer;
 
         xPosPeer = point.x ();
@@ -187,15 +170,18 @@ GraphDisplay::paintEvent (QPaintEvent *event)
 }
 
 GraphDisplay::ElementDisplayInfo
-GraphDisplay::calculateOnePosition (const ElementInfo &info)
+GraphDisplay::calculateOnePosition (const ElementInfo &info, const ElementDisplayInfo *oldDispInfo)
 {
   ElementDisplayInfo displayInfo;
-  displayInfo.m_id = info.m_id;
-  displayInfo.m_name = info.m_name;
-  displayInfo.m_isSelected = false;
 
-  int width = 150;
-  int height = 50;
+  if (oldDispInfo != NULL) {
+    displayInfo = *oldDispInfo;
+  } else {
+    displayInfo.m_name = info.m_name;
+    displayInfo.m_name = info.m_name;
+    displayInfo.m_isSelected = false;
+    displayInfo.m_rect = QRect(10, 10, 150, 50);
+  }
 
   int numInPads, numOutPads;
   numInPads = numOutPads = 0;
@@ -207,20 +193,15 @@ GraphDisplay::calculateOnePosition (const ElementInfo &info)
       numInPads++;
   }
 
-  if (std::max (numInPads, numOutPads) >= 1)
-    height += (std::max (numInPads, numOutPads) - 1) * 25;
+  displayInfo.m_rect.setHeight(std::max(50, std::max (numInPads, numOutPads) * 25));
 
-  int curX, curY;
-  curX = curY = 10;
-
-  QRect rect (curX, curY, width, height);
-
+  QRect &rect = displayInfo.m_rect;
   while (true) {
-    rect = QRect (curX, curY, width, height);
-    QRect rectTest (curX, curY - 15, width + 15, height + 15);
+    QRect rectTest (rect.x(), rect.y() - 15, rect.width() + 30, rect.height() + 15);
     bool noIntersects = true;
     for (std::size_t i = 0; i < m_displayInfo.size (); i++) {
-      if (rectTest.intersects (m_displayInfo[i].m_rect)) {
+      if (m_displayInfo[i].m_name != info.m_name
+          && rectTest.intersects (m_displayInfo[i].m_rect)) {
         noIntersects = false;
         break;
       }
@@ -229,7 +210,7 @@ GraphDisplay::calculateOnePosition (const ElementInfo &info)
     if (noIntersects)
       break;
 
-    curY += 25;
+    rect.moveTop(rect.y() + 25);
   }
 
   displayInfo.m_rect = rect;
@@ -246,7 +227,7 @@ GraphDisplay::calculatePositions ()
     for (; i < m_displayInfo.size (); i++) {
       std::size_t j = 0;
       for (; j < m_info.size (); j++) {
-        if (m_displayInfo[i].m_id == m_info[j].m_id)
+        if (m_displayInfo[i].m_name == m_info[j].m_name)
           break;
       }
 
@@ -264,8 +245,10 @@ GraphDisplay::calculatePositions ()
   for (; i < m_info.size (); i++) {
     std::size_t j = 0;
     for (; j < m_displayInfo.size (); j++) {
-      if (m_displayInfo[j].m_id == m_info[i].m_id)
+      if (m_displayInfo[j].m_name == m_info[i].m_name) {
+        m_displayInfo[j] = calculateOnePosition (m_info[i], &m_displayInfo[j]);
         break;
+      }
     }
 
     if (j == m_displayInfo.size ())
@@ -275,7 +258,7 @@ GraphDisplay::calculatePositions ()
   std::vector<ElementDisplayInfo> reorderedDisplayInfo (m_info.size ());
   for (std::size_t i = 0; i < m_info.size (); i++) {
     for (std::size_t j = 0; j < m_displayInfo.size (); j++) {
-      if (m_displayInfo[j].m_id == m_info[i].m_id) {
+      if (m_displayInfo[j].m_name == m_info[i].m_name) {
         reorderedDisplayInfo[i] = m_displayInfo[j];
         break;
       }
@@ -288,23 +271,23 @@ GraphDisplay::calculatePositions ()
 void
 GraphDisplay::mousePressEvent (QMouseEvent *event)
 {
-  std::size_t elementId, padId;
-  getIdByPosition (event->pos (), elementId, padId);
+  std::string elementName, padName;
+  getNameByPosition (event->pos (), elementName, padName);
 
   if (event->buttons () & Qt::RightButton) {
     showContextMenu (event);
   }
   else {
-    if (padId != ((size_t) -1)) {
-      m_moveInfo.m_padId = padId;
-      m_moveInfo.m_elementId = elementId;
+    if (!padName.empty()) {
+      m_moveInfo.m_padName = padName;
+      m_moveInfo.m_elementName = elementName;
       m_moveInfo.m_position = event->pos ();
       m_moveInfo.m_action = MakeConnect;
       m_moveInfo.m_startPosition = event->pos ();
     }
-    else if (elementId != ((size_t) -1)) {
-      m_moveInfo.m_elementId = elementId;
-      m_moveInfo.m_padId = -1;
+    else if (!elementName.empty()) {
+      m_moveInfo.m_elementName = elementName;
+      m_moveInfo.m_padName = -1;
       m_moveInfo.m_position = event->pos ();
       m_moveInfo.m_action = MoveComponent;
       m_moveInfo.m_startPosition = event->pos ();
@@ -324,29 +307,29 @@ void
 GraphDisplay::mouseReleaseEvent (QMouseEvent *event)
 {
   if (m_moveInfo.m_action == MakeConnect) {
-    std::size_t elementId, padId;
-    getIdByPosition (event->pos (), elementId, padId);
+    std::string elementName, padName;
+    getNameByPosition (event->pos (), elementName, padName);
 
-    if (elementId != ((size_t) -1) && padId != ((size_t) -1)) {
+    if (!elementName.empty() && !padName.empty()) {
       ElementInfo infoSrc, infoDst;
       const char *srcPad, *dstPad;
       srcPad = NULL;
       dstPad = NULL;
 
       for (std::size_t i = 0; i < m_info.size (); i++) {
-        if (m_info[i].m_id == m_moveInfo.m_elementId) {
+        if (m_info[i].m_name == m_moveInfo.m_elementName) {
           infoSrc = m_info[i];
           for (std::size_t j = 0; j < m_info[i].m_pads.size (); j++) {
-            if (m_info[i].m_pads[j].m_id == m_moveInfo.m_padId) {
+            if (m_info[i].m_pads[j].m_name == m_moveInfo.m_padName) {
               srcPad = m_info[i].m_pads[j].m_name.c_str ();
               break;
             }
           }
         }
-        if (m_info[i].m_id == elementId) {
+        if (m_info[i].m_name == elementName) {
           infoDst = m_info[i];
           for (std::size_t j = 0; j < m_info[i].m_pads.size (); j++) {
-            if (m_info[i].m_pads[j].m_id == padId) {
+            if (m_info[i].m_pads[j].m_name == padName) {
               dstPad = m_info[i].m_pads[j].m_name.c_str ();
               break;
             }
@@ -379,7 +362,6 @@ GraphDisplay::mouseReleaseEvent (QMouseEvent *event)
       }
 
       m_info = m_pGraph->GetInfo ();
-      updateDisplayInfoIds ();
       if (g_str_has_prefix (infoDst.m_name.c_str (), "decodebin")) {
         m_pGraph->Play ();
         LOG_INFO("Launch play to discover the new pad");
@@ -408,7 +390,7 @@ GraphDisplay::mouseReleaseEvent (QMouseEvent *event)
 
     if (dx == dy && dy == 0) {
       for (std::size_t i = 0; i < m_displayInfo.size (); i++) {
-        if (m_displayInfo[i].m_id == m_moveInfo.m_elementId) {
+        if (m_displayInfo[i].m_name == m_moveInfo.m_elementName) {
           m_displayInfo[i].m_isSelected = true;
           repaint ();
           break;
@@ -418,8 +400,8 @@ GraphDisplay::mouseReleaseEvent (QMouseEvent *event)
 
   }
   exit: m_moveInfo.m_action = None;
-  m_moveInfo.m_elementId = -1;
-  m_moveInfo.m_padId = -1;
+  m_moveInfo.m_elementName = -1;
+  m_moveInfo.m_padName = -1;
   m_moveInfo.m_startPosition = QPoint ();
   m_moveInfo.m_position = QPoint ();
   repaint ();
@@ -433,7 +415,7 @@ GraphDisplay::mouseMoveEvent (QMouseEvent *event)
     int dy = event->y () - m_moveInfo.m_position.y ();
 
     for (std::size_t i = 0; i < m_displayInfo.size (); i++) {
-      if (m_displayInfo[i].m_id == m_moveInfo.m_elementId) {
+      if (m_displayInfo[i].m_name == m_moveInfo.m_elementName) {
         QRect newRect = m_displayInfo[i].m_rect;
         newRect.adjust (dx, dy, dx, dy);
         if (contentsRect ().contains (newRect))
@@ -448,11 +430,11 @@ GraphDisplay::mouseMoveEvent (QMouseEvent *event)
     repaint ();
   }
   else {
-    std::size_t elementId, padId;
-    getIdByPosition (event->pos (), elementId, padId);
-    if (padId != ((size_t) -1)) {
-      ElementInfo* element = getElement (elementId);
-      PadInfo* pad = getPad (elementId, padId);
+    std::string elementName, padName;
+    getNameByPosition (event->pos (), elementName, padName);
+    if (!padName.empty()) {
+      ElementInfo* element = getElement (elementName);
+      PadInfo* pad = getPad (elementName, padName);
       QString caps = m_pGraph->getPadCaps (element, pad, PAD_CAPS_ALL, true);
       setToolTip (caps);
     }
@@ -475,8 +457,8 @@ GraphDisplay::showContextMenu (QMouseEvent *event)
 {
   QMenu menu;
 
-  std::size_t elementId, padId;
-  getIdByPosition (event->pos (), elementId, padId);
+  std::string elementName, padName;
+  getNameByPosition (event->pos (), elementName, padName);
 
   GstState state;
   GstStateChangeReturn res = gst_element_get_state (m_pGraph->m_pGraph, &state,
@@ -501,13 +483,13 @@ GraphDisplay::showContextMenu (QMouseEvent *event)
       pact->setDisabled (true);
 
   }
-  else if (padId != ((size_t) -1)) {
+  else if (!padName.empty()) {
     menu.addAction (new CustomMenuAction ("Render", &menu));
     menu.addAction (new CustomMenuAction ("Render anyway", &menu));
     menu.addAction (new CustomMenuAction ("Pad properties", &menu));
     menu.addAction (new CustomMenuAction ("typefind", "ElementName", &menu));
   }
-  else if (elementId != ((size_t) -1)) {
+  else if (!elementName.empty()) {
     menu.addAction (new CustomMenuAction ("Element properties", &menu));
     QAction *pact = new CustomMenuAction ("Remove", &menu);
     menu.addAction (pact);
@@ -521,17 +503,17 @@ GraphDisplay::showContextMenu (QMouseEvent *event)
     for (std::size_t i = 0; i < m_info.size (); i++) {
       for (std::size_t j = 0; j < m_info[i].m_connections.size (); j++) {
 
-        QPoint point = getPadPosition (m_info[i].m_id,
-                                       m_info[i].m_pads[j].m_id);
+        QPoint point = getPadPosition (m_info[i].m_name,
+                                       m_info[i].m_pads[j].m_name);
 
         double x1, y1;
         x1 = point.x ();
         y1 = point.y ();
 
-        if (m_info[i].m_connections[j].m_elementId != ((size_t) -1)
-        && m_info[i].m_connections[j].m_padId != ((size_t) -1)) {
-          point = getPadPosition (m_info[i].m_connections[j].m_elementId,
-                                  m_info[i].m_connections[j].m_padId);
+        if (!m_info[i].m_connections[j].m_elementName.empty()
+            && !m_info[i].m_connections[j].m_padName.empty()) {
+          point = getPadPosition (m_info[i].m_connections[j].m_elementName,
+                                  m_info[i].m_connections[j].m_padName);
           double x2, y2;
 
           x2 = point.x ();
@@ -548,8 +530,8 @@ GraphDisplay::showContextMenu (QMouseEvent *event)
           distance = distance / sqrt (dy * dy + dx * dx);
 
           if (distance < 5) {
-            elementId = m_info[i].m_id;
-            padId = m_info[i].m_pads[j].m_id;
+            elementName = m_info[i].m_name;
+            padName = m_info[i].m_pads[j].m_name;
 
             QAction *pact = new CustomMenuAction ("Disconnect", &menu);
             menu.addAction (pact);
@@ -574,23 +556,23 @@ GraphDisplay::showContextMenu (QMouseEvent *event)
     event->globalPos ());
     if (pact) {
       if (pact->getName () == "Remove")
-        removePlugin (elementId);
+        removePlugin (elementName);
       else if (pact->getName () == "Element properties")
-        showElementProperties (elementId);
+        showElementProperties (elementName);
       else if (pact->getName () == "Pad properties")
-        showPadProperties (elementId, padId);
+        showPadProperties (elementName, padName);
       else if (pact->getName () == "Render")
-        renderPad (elementId, padId, true);
+        renderPad (elementName, padName, true);
       else if (pact->getName () == "Render anyway")
-        renderPad (elementId, padId, false);
+        renderPad (elementName, padName, false);
       else if (pact->getName () == "Disconnect")
-        disconnect (elementId, padId);
+        disconnect (elementName, padName);
       else if (pact->getName () == "Request pad...")
-        requestPad (elementId);
+        requestPad (elementName);
       else if (pact->getName () == "Remove selected")
         removeSelected ();
       else if (pact->getName () == "ElementName")
-        connectPlugin (elementId, pact->text ());
+        connectPlugin (elementName, pact->text ().toStdString());
       else if (pact->getName () == "Add plugin")
         addPlugin ();
       else if (pact->getName () == "Clear graph")
@@ -619,7 +601,7 @@ GraphDisplay::removeSelected ()
     }
 
     if (i != m_displayInfo.size ())
-      removePlugin (m_displayInfo[i].m_id);
+      removePlugin (m_displayInfo[i].m_name);
     else
       break;
   }
@@ -638,9 +620,9 @@ GraphDisplay::clearGraph ()
 }
 
 void
-GraphDisplay::removePlugin (std::size_t id)
+GraphDisplay::removePlugin (std::string name)
 {
-  ElementInfo* element = getElement (id);
+  ElementInfo* element = getElement (name);
   if (element) {
     if (m_pGraph->RemovePlugin (element->m_name.c_str ())) {
       std::vector<ElementInfo> info = m_pGraph->GetInfo ();
@@ -656,31 +638,31 @@ GraphDisplay::removePlugin (std::size_t id)
 }
 
 void
-GraphDisplay::connectPlugin (std::size_t elementId, const QString& name)
+GraphDisplay::connectPlugin (std::string elementName, std::string name)
 {
-  ElementInfo* element = getElement (elementId);
-  gchar* pluginName = m_pGraph->AddPlugin (name.toStdString ().c_str (), NULL);
+  ElementInfo* element = getElement (elementName);
+  gchar* pluginName = m_pGraph->AddPlugin (name.c_str (), NULL);
   m_pGraph->Connect (element->m_name.c_str (), pluginName);
   g_free (pluginName);
 }
 
 void
-GraphDisplay::showElementProperties (std::size_t id)
+GraphDisplay::showElementProperties (std::string name)
 {
-  ElementInfo* element = getElement (id);
+  ElementInfo* element = getElement (name);
   if (element) {
     ElementProperties *pprops = new ElementProperties (
-    m_pGraph, element->m_name.c_str ());
+      m_pGraph, element->m_name.c_str ());
     pprops->setAttribute (Qt::WA_QuitOnClose, false);
     pprops->show ();
   }
 }
 
 void
-GraphDisplay::showPadProperties (std::size_t elementId, std::size_t padId)
+GraphDisplay::showPadProperties (std::string elementName, std::string padName)
 {
-  ElementInfo* element = getElement (elementId);
-  PadInfo* pad = getPad (elementId, padId);
+  ElementInfo* element = getElement (elementName);
+  PadInfo* pad = getPad (elementName, padName);
   if (pad) {
     PadProperties *pprops = new PadProperties (m_pGraph,
                                                element->m_name.c_str (),
@@ -691,10 +673,10 @@ GraphDisplay::showPadProperties (std::size_t elementId, std::size_t padId)
 }
 
 void
-GraphDisplay::renderPad (std::size_t elementId, std::size_t padId, bool capsAny)
+GraphDisplay::renderPad (std::string elementName, std::string padName, bool capsAny)
 {
-  ElementInfo* element = getElement (elementId);
-  PadInfo* pad = getPad (elementId, padId);
+  ElementInfo* element = getElement (elementName);
+  PadInfo* pad = getPad (elementName, padName);
 
   if (!element || !pad)
     LOG_INFO("element or pad is unreachable");
@@ -719,25 +701,25 @@ GraphDisplay::renderPad (std::size_t elementId, std::size_t padId, bool capsAny)
 }
 
 void
-GraphDisplay::disconnect (size_t elementId, size_t padId)
+GraphDisplay::disconnect (std::string elementName, std::string padName)
 {
   std::string src, dst, srcPad, dstPad;
 
   for (std::size_t i = 0; i < m_info.size (); i++) {
-    if (m_info[i].m_id == elementId) {
+    if (m_info[i].m_name == elementName) {
       for (std::size_t j = 0; j < m_info[i].m_pads.size (); j++) {
-        if (m_info[i].m_pads[j].m_id == padId) {
+        if (m_info[i].m_pads[j].m_name == padName) {
           if (m_info[i].m_pads[j].m_type == PadInfo::Out) {
             src = m_info[i].m_name;
             srcPad = m_info[i].m_pads[j].m_name.c_str ();
-            elementId = m_info[i].m_connections[j].m_elementId;
-            padId = m_info[i].m_connections[j].m_padId;
+            elementName = m_info[i].m_connections[j].m_elementName;
+            padName = m_info[i].m_connections[j].m_padName;
           }
           else {
             dst = m_info[i].m_name;
             dstPad = m_info[i].m_pads[j].m_name.c_str ();
-            elementId = m_info[i].m_connections[j].m_elementId;
-            padId = m_info[i].m_connections[j].m_padId;
+            elementName = m_info[i].m_connections[j].m_elementName;
+            padName = m_info[i].m_connections[j].m_padName;
           }
           break;
         }
@@ -748,9 +730,9 @@ GraphDisplay::disconnect (size_t elementId, size_t padId)
   }
 
   for (std::size_t i = 0; i < m_info.size (); i++) {
-    if (m_info[i].m_id == elementId) {
+    if (m_info[i].m_name == elementName) {
       for (std::size_t j = 0; j < m_info[i].m_pads.size (); j++) {
-        if (m_info[i].m_pads[j].m_id == padId) {
+        if (m_info[i].m_pads[j].m_name == padName) {
           if (m_info[i].m_pads[j].m_type == PadInfo::Out) {
             src = m_info[i].m_name;
             srcPad = m_info[i].m_pads[j].m_name.c_str ();
@@ -775,12 +757,11 @@ GraphDisplay::disconnect (size_t elementId, size_t padId)
                         dstPad.c_str ());
 
   m_info = m_pGraph->GetInfo ();
-  updateDisplayInfoIds ();
   repaint ();
 }
 
 void
-GraphDisplay::requestPad (std::size_t elementId)
+GraphDisplay::requestPad (std::string elementName)
 {
   QStringList labels;
   labels.push_back ("Template name");
@@ -793,7 +774,7 @@ GraphDisplay::requestPad (std::size_t elementId)
   ptwgt->setSelectionBehavior (QAbstractItemView::SelectRows);
   ptwgt->setEditTriggers (QAbstractItemView::NoEditTriggers);
 
-  ElementInfo* elementInfo = getElement (elementId);
+  ElementInfo* elementInfo = getElement (elementName);
   GstElement *element = NULL;
   if (elementInfo)
     element = gst_bin_get_by_name (GST_BIN (m_pGraph->m_pGraph),
@@ -885,13 +866,14 @@ GraphDisplay::addRequestPad (int row, int collumn)
 }
 
 void
-GraphDisplay::getIdByPosition (const QPoint &pos, std::size_t &elementId,
-                               std::size_t &padId)
+GraphDisplay::getNameByPosition (const QPoint &pos, std::string &elementName,
+                                 std::string &padName)
 {
   std::size_t i = 0;
-  elementId = padId = -1;
+  elementName.clear();
+  padName.clear();
   for (; i < m_displayInfo.size (); i++) {
-    if (elementId != ((size_t) -1))
+    if (!elementName.empty())
       break;
 
     QRect rect (m_displayInfo[i].m_rect.x () - 8,
@@ -901,8 +883,8 @@ GraphDisplay::getIdByPosition (const QPoint &pos, std::size_t &elementId,
     if (rect.contains (pos)) {
       std::size_t j = 0;
       for (; j < m_info[i].m_pads.size (); j++) {
-        QPoint point = getPadPosition (m_displayInfo[i].m_id,
-                                       m_info[i].m_pads[j].m_id);
+        QPoint point = getPadPosition (m_displayInfo[i].m_name,
+                                       m_info[i].m_pads[j].m_name);
 
         int xPos, yPos;
         xPos = point.x ();
@@ -913,29 +895,29 @@ GraphDisplay::getIdByPosition (const QPoint &pos, std::size_t &elementId,
 
         QRect rect (xPos, yPos, PAD_SIZE_ACTION, PAD_SIZE_ACTION);
         if (rect.contains (pos)) {
-          padId = m_info[i].m_pads[j].m_id;
-          elementId = m_displayInfo[i].m_id;
+          padName = m_info[i].m_pads[j].m_name;
+          elementName = m_displayInfo[i].m_name;
           break;
         }
       }
 
       if (j == m_info[i].m_pads.size ()) {
         if (m_displayInfo[i].m_rect.contains (pos))
-          elementId = m_displayInfo[i].m_id;
+          elementName = m_displayInfo[i].m_name;
       }
     }
   }
 }
 
 QPoint
-GraphDisplay::getPadPosition (std::size_t elementId, std::size_t padId)
+GraphDisplay::getPadPosition (std::string elementName, std::string padName)
 {
   QPoint res;
-  if (elementId == ((size_t) -1) || padId == ((size_t) -1))
+  if (elementName.empty()  || padName.empty())
     return res;
 
   for (std::size_t i = 0; i < m_displayInfo.size (); i++) {
-    if (m_displayInfo[i].m_id == elementId) {
+    if (m_displayInfo[i].m_name == elementName) {
       int numInPads, numOutPads;
       numInPads = numOutPads = 0;
       for (std::size_t j = 0; j < m_info[i].m_pads.size (); j++) {
@@ -967,7 +949,7 @@ GraphDisplay::getPadPosition (std::size_t elementId, std::size_t padId)
           inPos += inDelta;
         }
 
-        if (m_info[i].m_pads[j].m_id == padId) {
+        if (m_info[i].m_pads[j].m_name == padName) {
           res = QPoint (xPos, yPos);
           break;
         }

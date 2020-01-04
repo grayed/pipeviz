@@ -27,7 +27,6 @@ struct PadInfo
 		In
 	};
 
-	size_t        m_id;
 	PadType       m_type;
 	std::string   m_name;
 
@@ -36,9 +35,6 @@ struct PadInfo
 	{
 		if(this == &obj)
 			return true;
-
-		if(m_id != obj.m_id)
-			return false;
 
 		if(m_type != obj.m_type)
 			return false;
@@ -54,18 +50,18 @@ struct ElementInfo
 {
 	struct Connection
 	{
-		size_t           m_padId;
-		size_t           m_elementId;
+		std::string      m_padName;
+		std::string      m_elementName;
 
 		bool operator == (const Connection &obj) const
 		{
 			if(this == &obj)
 				return true;
 
-			if(m_padId != obj.m_padId)
+			if(m_padName != obj.m_padName)
 				return false;
 
-			if(m_elementId != obj.m_elementId)
+			if(m_elementName != obj.m_elementName)
 				return false;
 
 			return true;
@@ -73,7 +69,6 @@ struct ElementInfo
 	};
 
 
-	size_t                       m_id;
 	std::string                  m_name;
 	std::string                  m_pluginName;
 	std::vector<PadInfo>         m_pads;

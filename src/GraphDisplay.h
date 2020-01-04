@@ -50,8 +50,8 @@ private:
     }
 
     MoveAction m_action;
-    size_t m_elementId;
-    size_t m_padId;
+    std::string m_elementName;
+    std::string m_padName;
     QPoint m_position;
     QPoint m_startPosition;
   };
@@ -59,30 +59,28 @@ private:
   struct ElementDisplayInfo
   {
     QRect m_rect;
-    size_t m_id;
     std::string m_name;
     bool m_isSelected;
   };
 
   void calculatePositions();
-  void updateDisplayInfoIds();
-  ElementDisplayInfo calculateOnePosition(const ElementInfo &info);
+  ElementDisplayInfo calculateOnePosition(const ElementInfo &info, const ElementDisplayInfo *oldDispInfo = NULL);
   void showContextMenu(QMouseEvent *event);
-  void showElementProperties(std::size_t id);
-  void showPadProperties(std::size_t elementId, std::size_t padId);
-  void renderPad(std::size_t elementId, std::size_t padId, bool capsAny);
-  void removePlugin(std::size_t id);
+  void showElementProperties(std::string name);
+  void showPadProperties(std::string elementName, std::string padName);
+  void renderPad(std::string elementName, std::string padName, bool capsAny);
+  void removePlugin(std::string name);
   void removeSelected();
-  void getIdByPosition(const QPoint &pos, std::size_t &elementId, std::size_t &padId);
-  QPoint getPadPosition(std::size_t elementId, std::size_t padId);
-  void disconnect(std::size_t elementId, std::size_t padId);
-  void requestPad(std::size_t elementId);
-  void connectPlugin(std::size_t elementId, const QString& destElementName);
+  void getNameByPosition(const QPoint &pos, std::string &elementName, std::string &padName);
+  QPoint getPadPosition(std::string elementName, std::string padName);
+  void disconnect(std::string elementName, std::string padName);
+  void requestPad(std::string elementName);
+  void connectPlugin(std::string elementName, std::string destElementName);
   void addPlugin();
   void clearGraph();
 
-  ElementInfo* getElement(std::size_t elementId);
-  PadInfo* getPad(std::size_t elementId, std::size_t padId);
+  ElementInfo* getElement(std::string elementName);
+  PadInfo* getPad(std::string elementName, std::string padName);
 
   std::vector <ElementInfo> m_info;
   std::vector <ElementDisplayInfo> m_displayInfo;
