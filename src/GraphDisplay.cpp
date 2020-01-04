@@ -213,8 +213,6 @@ GraphDisplay::calculateOnePosition (const ElementInfo &info, const ElementDispla
     rect.moveTop(rect.y() + 25);
   }
 
-  displayInfo.m_rect = rect;
-
   return displayInfo;
 
 }
